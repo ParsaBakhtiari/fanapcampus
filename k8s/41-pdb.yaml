@@ -1,0 +1,15 @@
+# Keep at least one pod of each service up during node drains / upgrades.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata: {name: frontend, namespace: pardis-shop}
+spec: {minAvailable: 1, selector: {matchLabels: {app: frontend}}}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata: {name: backend-api, namespace: pardis-shop}
+spec: {minAvailable: 1, selector: {matchLabels: {app: backend-api}}}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata: {name: order-service, namespace: pardis-shop}
+spec: {minAvailable: 1, selector: {matchLabels: {app: order-service}}}

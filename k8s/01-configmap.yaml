@@ -1,0 +1,21 @@
+# Non-secret settings shared by backend-api and order-service.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: shop-config
+  namespace: pardis-shop
+data:
+  ENVIRONMENT: production
+  LOG_LEVEL: INFO
+  CURRENCY: USD
+  SHOP_NAME: Pardis Shop
+  ORDER_SERVICE_URL: http://order-service:8000
+
+  # OBS (S3-compatible API). Use the OBS endpoint of your region, reachable
+  # from the VPC (VPC endpoint or NAT). Buckets must exist before deploy.
+  OBS_ENDPOINT: https://__OBS_ENDPOINT__
+  OBS_REGION: __OBS_REGION__
+  OBS_ADDRESSING_STYLE: virtual   # try "path" if you get DNS / NoSuchBucket errors
+  OBS_SSE: ""                     # set to AES256 only if OBS accepts SSE headers
+  OBS_BUCKET_IMAGES: ecommerce-images
+  OBS_BUCKET_INVOICES: ecommerce-invoices

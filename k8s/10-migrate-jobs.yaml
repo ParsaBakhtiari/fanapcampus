@@ -1,0 +1,67 @@
+# Schema + bootstrap Jobs. scripts/deploy.sh deletes and re-creates them on
+# every deploy (Jobs are immutable, so "kubectl apply" alone would fail).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: backend-migrate
+  namespace: pardis-shop
+  labels: {app: backend-migrate}
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels: {app: backend-migrate}
+    spec:
+      restartPolicy: Never
+      imagePullSecrets: [{name: __PULL_SECRET__}]
+      securityContext: {runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: migrate
+          image: __REGISTRY__/pardis-shop-backend-api:__TAG__
+          command: ["python", "-m", "app.migrate"]
+          envFrom: [{configMapRef: {name: shop-config}}]
+          env:
+            - {name: DATABASE_URL, valueFrom: {secretKeyRef: {name: shop-secrets, key: BACKEND_DATABASE_URL}}}
+            - {name: JWT_SECRET, valueFrom: {secretKeyRef: {name: shop-secrets, key: JWT_SECRET}}}
+            - {name: INTERNAL_TOKEN, valueFrom: {secretKeyRef: {name: shop-secrets, key: INTERNAL_TOKEN}}}
+            - {name: ADMIN_EMAIL, valueFrom: {secretKeyRef: {name: shop-secrets, key: ADMIN_EMAIL}}}
+            - {name: ADMIN_PASSWORD, valueFrom: {secretKeyRef: {name: shop-secrets, key: ADMIN_PASSWORD}}}
+            - {name: SEED_DEMO_DATA, value: "__SEED_DEMO_DATA__"}
+          resources:
+            requests: {cpu: 50m, memory: 128Mi}
+            limits: {cpu: 500m, memory: 256Mi}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: ["ALL"]}}
+          volumeMounts: [{name: tmp, mountPath: /tmp}]
+      volumes: [{name: tmp, emptyDir: {}}]
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: order-migrate
+  namespace: pardis-shop
+  labels: {app: order-migrate}
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels: {app: order-migrate}
+    spec:
+      restartPolicy: Never
+      imagePullSecrets: [{name: __PULL_SECRET__}]
+      securityContext: {runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: migrate
+          image: __REGISTRY__/pardis-shop-order-service:__TAG__
+          command: ["python", "-m", "app.migrate"]
+          envFrom: [{configMapRef: {name: shop-config}}]
+          env:
+            - {name: DATABASE_URL, valueFrom: {secretKeyRef: {name: shop-secrets, key: ORDER_DATABASE_URL}}}
+            - {name: INTERNAL_TOKEN, valueFrom: {secretKeyRef: {name: shop-secrets, key: INTERNAL_TOKEN}}}
+          resources:
+            requests: {cpu: 50m, memory: 128Mi}
+            limits: {cpu: 500m, memory: 256Mi}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: ["ALL"]}}
+          volumeMounts: [{name: tmp, mountPath: /tmp}]
+      volumes: [{name: tmp, emptyDir: {}}]

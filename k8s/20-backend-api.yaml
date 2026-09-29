@@ -1,0 +1,68 @@
+# Backend API: auth, catalog, cart (DCS), checkout, admin, product images (OBS).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend-api
+  namespace: pardis-shop
+  labels: {app: backend-api, tier: backend}
+spec:
+  replicas: 2
+  revisionHistoryLimit: 5
+  strategy: {type: RollingUpdate, rollingUpdate: {maxUnavailable: 0, maxSurge: 1}}
+  selector:
+    matchLabels: {app: backend-api}
+  template:
+    metadata:
+      labels: {app: backend-api, tier: backend}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: /metrics
+    spec:
+      imagePullSecrets: [{name: __PULL_SECRET__}]
+      terminationGracePeriodSeconds: 30
+      securityContext: {runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, seccompProfile: {type: RuntimeDefault}}
+      topologySpreadConstraints:
+        - {maxSkew: 1, topologyKey: kubernetes.io/hostname, whenUnsatisfiable: DoNotSchedule, labelSelector: {matchLabels: {app: backend-api}}}
+        - {maxSkew: 1, topologyKey: topology.kubernetes.io/zone, whenUnsatisfiable: ScheduleAnyway, labelSelector: {matchLabels: {app: backend-api}}}
+      containers:
+        - name: backend-api
+          image: __REGISTRY__/pardis-shop-backend-api:__TAG__
+          ports: [{name: http, containerPort: 8000}]
+          envFrom: [{configMapRef: {name: shop-config}}]
+          env:
+            - {name: DATABASE_URL, valueFrom: {secretKeyRef: {name: shop-secrets, key: BACKEND_DATABASE_URL}}}
+            - {name: REDIS_URL, valueFrom: {secretKeyRef: {name: shop-secrets, key: REDIS_URL}}}
+            - {name: JWT_SECRET, valueFrom: {secretKeyRef: {name: shop-secrets, key: JWT_SECRET}}}
+            - {name: INTERNAL_TOKEN, valueFrom: {secretKeyRef: {name: shop-secrets, key: INTERNAL_TOKEN}}}
+            - {name: OBS_ACCESS_KEY, valueFrom: {secretKeyRef: {name: shop-secrets, key: OBS_ACCESS_KEY}}}
+            - {name: OBS_SECRET_KEY, valueFrom: {secretKeyRef: {name: shop-secrets, key: OBS_SECRET_KEY}}}
+          readinessProbe:
+            httpGet: {path: /healthz/ready, port: http}
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet: {path: /healthz/live, port: http}
+            initialDelaySeconds: 10
+            periodSeconds: 20
+            timeoutSeconds: 3
+          lifecycle:
+            preStop: {exec: {command: ["python", "-c", "import time; time.sleep(5)"]}}
+          resources:
+            requests: {cpu: 100m, memory: 192Mi}
+            limits: {cpu: "1", memory: 384Mi}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: ["ALL"]}}
+          volumeMounts: [{name: tmp, mountPath: /tmp}]
+      volumes: [{name: tmp, emptyDir: {}}]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-api
+  namespace: pardis-shop
+  labels: {app: backend-api}
+spec:
+  type: ClusterIP
+  selector: {app: backend-api}
+  ports: [{name: http, port: 8000, targetPort: http}]

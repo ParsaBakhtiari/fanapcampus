@@ -1,0 +1,123 @@
+# Local development stack: same 3 app containers as in CCE, plus local
+# stand-ins for the managed services (MySQL = RDS, Redis = DCS, local-s3 = OBS).
+#   cp .env.example .env && docker compose up --build
+#   open http://localhost:8080
+name: pardis-shop
+
+x-obs: &obs
+  OBS_ENDPOINT: http://local-s3:9000
+  OBS_REGION: us-east-1
+  OBS_ACCESS_KEY: local
+  OBS_SECRET_KEY: local
+  OBS_ADDRESSING_STYLE: path
+  OBS_BUCKET_IMAGES: ecommerce-images
+  OBS_BUCKET_INVOICES: ecommerce-invoices
+
+x-backend-env: &backend-env
+  <<: *obs
+  ENVIRONMENT: development
+  DATABASE_URL: mysql+pymysql://shop:${SHOP_DB_PASSWORD:-shop-pass}@mysql:3306/shop_db
+  REDIS_URL: redis://:${REDIS_PASSWORD:-redis-pass}@redis:6379/0
+  JWT_SECRET: ${JWT_SECRET:-local-dev-jwt-secret-please-change-0000000000}
+  INTERNAL_TOKEN: ${INTERNAL_TOKEN:-local-dev-internal-token-please-change-00000}
+  ORDER_SERVICE_URL: http://order-service:8000
+
+x-order-env: &order-env
+  <<: *obs
+  ENVIRONMENT: development
+  DATABASE_URL: mysql+pymysql://orders:${ORDER_DB_PASSWORD:-orders-pass}@mysql:3306/order_db
+  INTERNAL_TOKEN: ${INTERNAL_TOKEN:-local-dev-internal-token-please-change-00000}
+
+services:
+  # ---------------------------------------------------------------- managed-service stand-ins
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root-pass}
+      SHOP_DB_PASSWORD: ${SHOP_DB_PASSWORD:-shop-pass}
+      ORDER_DB_PASSWORD: ${ORDER_DB_PASSWORD:-orders-pass}
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./scripts/mysql-init.sh:/docker-entrypoint-initdb.d/01-init.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 5s
+      retries: 30
+
+  redis:
+    image: redis:5.0-alpine   # same major version as DCS Redis 5.0 in the Phase 1 guide
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:-redis-pass}", "--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a $$REDIS_PASSWORD ping 2>/dev/null | grep PONG"]
+      interval: 5s
+      retries: 20
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis-pass}
+
+  local-s3:
+    # S3-compatible server built from python:3.12-slim (no extra registry image).
+    # Creates ecommerce-images / -invoices / -backups on start. In-memory data.
+    build: ./local-s3
+
+  # ---------------------------------------------------------------- one-shot schema jobs
+  backend-migrate:
+    build: ./backend-api
+    command: ["python", "-m", "app.migrate"]
+    environment:
+      <<: *backend-env
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin12345}
+      SEED_DEMO_DATA: "true"
+    depends_on:
+      mysql: {condition: service_healthy}
+
+  order-migrate:
+    build: ./order-service
+    command: ["python", "-m", "app.migrate"]
+    environment: *order-env
+    depends_on:
+      mysql: {condition: service_healthy}
+
+  # ---------------------------------------------------------------- the 3 Phase 1 services
+  order-service:
+    build: ./order-service
+    environment: *order-env
+    read_only: true
+    tmpfs: [/tmp]
+    depends_on:
+      order-migrate: {condition: service_completed_successfully}
+      local-s3: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/healthz/ready')"]
+      interval: 10s
+      retries: 10
+
+  backend-api:
+    build: ./backend-api
+    environment: *backend-env
+    read_only: true
+    tmpfs: [/tmp]
+    depends_on:
+      backend-migrate: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
+      local-s3: {condition: service_healthy}
+      order-service: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/healthz/ready')"]
+      interval: 10s
+      retries: 10
+
+  frontend:
+    build: ./frontend
+    read_only: true
+    tmpfs: [/tmp, /var/cache/nginx]
+    ports: ["${HTTP_PORT:-8080}:8080"]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/healthz"]
+      interval: 10s
+      retries: 5
+    depends_on:
+      backend-api: {condition: service_healthy}
+
+volumes:
+  mysql-data:

@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pardis Shop</title>
+  <link rel="stylesheet" href="/assets/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#/shop">Pardis<span>Shop</span></a>
+    <nav>
+      <a href="#/shop" data-nav="shop">Shop</a>
+      <a href="#/orders" data-nav="orders" class="auth-only">Orders</a>
+      <a href="#/admin" data-nav="admin" class="admin-only">Admin</a>
+    </nav>
+    <div class="actions">
+      <button id="cart-btn" class="ghost auth-only" type="button">Cart <span id="cart-count" class="badge">0</span></button>
+      <span id="user-email" class="muted auth-only"></span>
+      <button id="login-btn" class="primary guest-only" type="button">Sign in</button>
+      <button id="logout-btn" class="ghost auth-only" type="button">Sign out</button>
+    </div>
+  </header>
+
+  <main>
+    <section id="view-shop" class="view">
+      <div class="hero">
+        <h1>Cloud essentials</h1>
+        <p class="muted">Demo storefront for the Phase 1 single-VPC architecture.</p>
+      </div>
+      <div id="products" class="grid"></div>
+    </section>
+
+    <section id="view-orders" class="view" hidden>
+      <h2>My orders</h2>
+      <div id="orders"></div>
+    </section>
+
+    <section id="view-admin" class="view" hidden>
+      <h2>Admin</h2>
+      <div class="admin-layout">
+        <form id="product-form" class="card form">
+          <h3>New product</h3>
+          <label>SKU <input name="sku" required pattern="[A-Za-z0-9._-]+" maxlength="64"></label>
+          <label>Name <input name="name" required maxlength="180"></label>
+          <label>Description <textarea name="description" rows="3"></textarea></label>
+          <div class="row">
+            <label>Price <input name="price" type="number" step="0.01" min="0.01" required></label>
+            <label>Stock <input name="stock" type="number" min="0" value="10" required></label>
+          </div>
+          <button class="primary" type="submit">Create product</button>
+        </form>
+        <div class="card">
+          <h3>Products</h3>
+          <table class="table" id="admin-products"></table>
+        </div>
+      </div>
+      <div class="card">
+        <h3>All orders</h3>
+        <table class="table" id="admin-orders"></table>
+      </div>
+    </section>
+  </main>
+
+  <aside id="cart-panel" class="drawer" hidden>
+    <div class="drawer-head">
+      <h3>Your cart</h3>
+      <button id="cart-close" class="ghost" type="button">Close</button>
+    </div>
+    <div id="cart-items"></div>
+    <form id="checkout-form" class="form">
+      <label>Shipping address <textarea name="address" rows="3" required minlength="5"></textarea></label>
+      <div class="total">Total: <strong id="cart-total">0.00</strong></div>
+      <button class="primary" type="submit">Place order</button>
+    </form>
+  </aside>
+
+  <dialog id="auth-dialog">
+    <form id="auth-form" class="form" method="dialog">
+      <h3 id="auth-title">Sign in</h3>
+      <label class="register-only" hidden>Full name <input name="full_name" maxlength="120"></label>
+      <label>Email <input name="email" type="email" required autocomplete="username"></label>
+      <label>Password <input name="password" type="password" required minlength="8" autocomplete="current-password"></label>
+      <div class="row">
+        <button class="primary" type="submit" id="auth-submit">Sign in</button>
+        <button class="ghost" type="button" id="auth-cancel">Cancel</button>
+      </div>
+      <p class="muted"><a href="#" id="auth-toggle">Create an account</a></p>
+    </form>
+  </dialog>
+
+  <div id="toast" role="status" hidden></div>
+  <script src="/assets/app.js"></script>
+</body>
+</html>

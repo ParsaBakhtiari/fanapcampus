@@ -1,0 +1,25 @@
+# ELB -> Ingress controller -> frontend. Everything enters through the frontend
+# (Users -> ... -> ELB -> Ingress -> Frontend -> Backend API -> Order Service).
+# Needs an ingress controller add-on in CCE whose Service is bound to the ELB.
+# TLS certificate: kubectl -n pardis-shop create secret tls shop-tls --cert=fullchain.pem --key=privkey.pem
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: pardis-shop
+  namespace: pardis-shop
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: 6m
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+spec:
+  ingressClassName: __INGRESS_CLASS__
+  tls:
+    - hosts: [__DOMAIN__]
+      secretName: shop-tls
+  rules:
+    - host: __DOMAIN__
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service: {name: frontend, port: {name: http}}

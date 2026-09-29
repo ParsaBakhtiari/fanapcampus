@@ -1,0 +1,43 @@
+# East-west traffic inside the cluster (security groups do this between subnets).
+#   anyone (ingress controller) -> frontend:8080
+#   frontend                    -> backend-api:8000
+#   backend-api                 -> order-service:8000
+# Egress stays open: pods must reach RDS, DCS, OBS and DNS.
+# Needs a CNI that enforces NetworkPolicy; otherwise these are simply ignored.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: default-deny-ingress, namespace: pardis-shop}
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: frontend-from-ingress, namespace: pardis-shop}
+spec:
+  podSelector: {matchLabels: {app: frontend}}
+  policyTypes: [Ingress]
+  ingress:
+    # Not pinned to the controller's namespace/labels: those differ between
+    # CCE add-ons and a wrong selector silently turns every request into a 504.
+    - ports: [{protocol: TCP, port: 8080}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: backend-api-from-frontend, namespace: pardis-shop}
+spec:
+  podSelector: {matchLabels: {app: backend-api}}
+  policyTypes: [Ingress]
+  ingress:
+    - from: [{podSelector: {matchLabels: {app: frontend}}}]
+      ports: [{protocol: TCP, port: 8000}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: order-service-from-backend, namespace: pardis-shop}
+spec:
+  podSelector: {matchLabels: {app: order-service}}
+  policyTypes: [Ingress]
+  ingress:
+    - from: [{podSelector: {matchLabels: {app: backend-api}}}]
+      ports: [{protocol: TCP, port: 8000}]
