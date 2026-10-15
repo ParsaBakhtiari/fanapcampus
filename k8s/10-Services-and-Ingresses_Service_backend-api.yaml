@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-api
+  namespace: pardis-shop
+  labels:
+    app: backend-api
+spec:
+  type: ClusterIP
+  selector:
+    app: backend-api
+  ports:
+  - name: http
+    port: 8000
+    targetPort: http
