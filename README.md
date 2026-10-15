@@ -308,10 +308,3 @@ docker compose logs -f backend-api order-service
 ```
 
 Files with real secrets (`.env`, `deploy.env`, `k8s/02-secret.yaml`) are git-ignored.
-
-## Roadmap: Phase 2
-
-- Split into an application VPC and a data/shared-services VPC (peering or Cloud Connect).
-- RDS primary/standby across AZs with automatic failover; read replicas for catalog reads.
-- KMS-managed encryption keys; cross-region replication for OBS.
-- Alembic migrations instead of `create_all`.
