@@ -14,10 +14,16 @@ render() {
       -e "s#__TAG__#${TAG}#g" \
       -e "s#__DOMAIN__#${DOMAIN}#g" \
       -e "s#__INGRESS_CLASS__#${INGRESS_CLASS}#g" \
+      -e "s#__ELB_ID__#${ELB_ID}#g" \
+      -e "s#__ELB_CLASS__#${ELB_CLASS:-performance}#g" \
       -e "s#__PULL_SECRET__#${PULL_SECRET}#g" \
       -e "s#__OBS_ENDPOINT__#${OBS_ENDPOINT}#g" \
       -e "s#__OBS_REGION__#${OBS_REGION}#g" \
+      -e "s#__OBS_BUCKET_IMAGES__#${OBS_BUCKET_IMAGES:-ecommerce-images}#g" \
+      -e "s#__OBS_BUCKET_INVOICES__#${OBS_BUCKET_INVOICES:-ecommerce-invoices}#g" \
       -e "s#__SEED_DEMO_DATA__#${SEED_DEMO_DATA}#g" \
+      -e "s#__POD_SG_ID__#${POD_SG_ID:-}#g" \
+      -e "s#__TLS_CERT_ID__#${TLS_CERT_ID:-}#g" \
       "$@"
 }
 
@@ -29,12 +35,12 @@ fi
 echo ">>> namespace and config"
 render k8s/00-namespace.yaml | kubectl apply -f -
 render k8s/01-configmap.yaml | kubectl apply -f -
+if [ -n "${POD_SG_ID:-}" ]; then render k8s/05-security-groups.yaml | kubectl apply -f -; fi
 
 if ! kubectl -n "$NS" get secret shop-secrets >/dev/null 2>&1; then
   echo "Secret shop-secrets is missing. cp k8s/02-secret.example.yaml k8s/02-secret.yaml, edit, kubectl apply -f k8s/02-secret.yaml" >&2
   exit 1
 fi
-kubectl -n "$NS" get secret shop-tls >/dev/null 2>&1 || echo "WARNING: TLS secret shop-tls not found; HTTPS on the Ingress will not work yet." >&2
 
 echo ">>> schema jobs"
 kubectl -n "$NS" delete job backend-migrate order-migrate --ignore-not-found --wait=true
@@ -47,7 +53,10 @@ if ! kubectl -n "$NS" wait --for=condition=complete job/backend-migrate job/orde
 fi
 
 echo ">>> services"
-for f in k8s/2*.yaml k8s/3*.yaml k8s/4*.yaml k8s/5*.yaml; do render "$f" | kubectl apply -f -; done
+for f in k8s/2*.yaml k8s/3*.yaml k8s/4*.yaml k8s/5*.yaml; do
+  [ "$f" = k8s/31-ingress-https.yaml ] && [ -z "${TLS_CERT_ID:-}" ] && continue
+  render "$f" | kubectl apply -f -
+done
 
 for d in order-service backend-api frontend; do
   kubectl -n "$NS" rollout status deployment/"$d" --timeout=300s
