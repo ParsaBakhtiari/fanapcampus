@@ -28,23 +28,23 @@ render() {
 }
 
 if [ "${1:-}" = "--render" ]; then
-  for f in k8s/[0-9]*.yaml; do [ "$f" = k8s/02-secret.example.yaml ] && continue; echo "---"; render "$f"; done
+  for f in k8s/[0-9]*.yaml; do case "$f" in k8s/02-*) continue ;; esac; echo "---"; render "$f"; done
   exit 0
 fi
 
 echo ">>> namespace and config"
-render k8s/00-namespace.yaml | kubectl apply -f -
-render k8s/01-configmap.yaml | kubectl apply -f -
-if [ -n "${POD_SG_ID:-}" ]; then render k8s/05-security-groups.yaml | kubectl apply -f -; fi
+render k8s/01-*.yaml | kubectl apply -f -
+render k8s/03-*.yaml | kubectl apply -f -
+render k8s/04-*.yaml | kubectl apply -f -
 
 if ! kubectl -n "$NS" get secret shop-secrets >/dev/null 2>&1; then
-  echo "Secret shop-secrets is missing. cp k8s/02-secret.example.yaml k8s/02-secret.yaml, edit, kubectl apply -f k8s/02-secret.yaml" >&2
+  echo "Secret shop-secrets is missing. Fill every CHANGE_ME in k8s/02-*.yaml, then kubectl apply -f k8s/02-*.yaml" >&2
   exit 1
 fi
 
 echo ">>> schema jobs"
 kubectl -n "$NS" delete job backend-migrate order-migrate --ignore-not-found --wait=true
-render k8s/10-migrate-jobs.yaml | kubectl apply -f -
+for f in k8s/05-*.yaml k8s/06-*.yaml; do render "$f" | kubectl apply -f -; done
 if ! kubectl -n "$NS" wait --for=condition=complete job/backend-migrate job/order-migrate --timeout=300s; then
   echo "Migration failed. Logs:" >&2
   kubectl -n "$NS" logs job/backend-migrate --tail=50 >&2 || true
@@ -53,8 +53,9 @@ if ! kubectl -n "$NS" wait --for=condition=complete job/backend-migrate job/orde
 fi
 
 echo ">>> services"
-for f in k8s/2*.yaml k8s/3*.yaml k8s/4*.yaml k8s/5*.yaml; do
-  [ "$f" = k8s/31-ingress-https.yaml ] && [ -z "${TLS_CERT_ID:-}" ] && continue
+for f in k8s/1[0-2]-*.yaml k8s/0[7-9]-*.yaml k8s/1[3-9]-*.yaml k8s/2[0-4]-*.yaml; do
+  case "$f" in k8s/14-*) grep -q PUT-CERTIFICATE-ID-HERE "$f" && continue ;; esac
+  case "$f" in k8s/2[1-4]-*) [ "${APPLY_NETPOL:-false}" = true ] || continue ;; esac
   render "$f" | kubectl apply -f -
 done
 
